@@ -1,25 +1,95 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+html_document: PA1_template.html
+output:
   html_document:
-    keep_md: true
+    df_print: paged
+title: 'Reproducible Research: Peer Assessment 1'
+keep_md: yes
 ---
 
+```{r setup, message=FALSE, warning=FALSE}
+library(dplyr)
+library(lattice)
+```
 
 ## Loading and preprocessing the data
-
-
-
+```{r loaddata}
+rawdata <- read.csv("activity.csv")
+```
+  
 ## What is mean total number of steps taken per day?
+```{r summarize, message=FALSE, warning=FALSE}
+#Count the total per day
+summarydata <- rawdata %>% select(date, steps) %>% 
+                            group_by(date) %>% 
+                            summarize(steps = sum(steps, na.rm = TRUE))
 
+hist(summarydata$steps)
 
-
+mean(summarydata$steps, na.rm = TRUE)
+median(summarydata$steps, na.rm = TRUE)
+```
+  
 ## What is the average daily activity pattern?
+```{r dailypattern, message=FALSE}
+#Calculate the average per interval
+dailydata <- rawdata %>% select(interval, steps) %>% 
+                            group_by(interval) %>% 
+                            summarize(steps = mean(steps, na.rm = TRUE))
 
+plot(dailydata$interval, dailydata$steps, type = "l")
+
+dailydata[dailydata$steps == max(dailydata$steps),]
+```
 
 
 ## Imputing missing values
+```{r missing, message=FALSE}
+#Count the missing entries
+sum(is.na(rawdata$steps))
 
+#Summarydata contains the per 5min interval means for the steps value
+# and given the clear effect time of day has on activity, those make good fill
+# ins for missing values on a per interval basis
 
+adapteddata <- rawdata
+for(i in 1:length(adapteddata$steps)) 
+{
+    if(is.na(adapteddata[i,1])) 
+    {
+        adapteddata[i,1] <- dailydata[dailydata$interval == adapteddata[i,3],2]
+    }
+}
+
+newsummarydata <- adapteddata %>% select(date, steps) %>% 
+                            group_by(date) %>% 
+                            summarize(steps = sum(steps, na.rm = TRUE))
+
+hist(newsummarydata$steps)
+
+mean(newsummarydata$steps)
+median(newsummarydata$steps)
+```
+The mean and median are apparently both depressed by ignoring missing values and 
+have increased as a result of filling them. The histogram also shows a more 
+centered distribution after filling missing values.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r weekends, message=FALSE}
+#Determine which days are weekend days
+adapteddata$daytype <- substr(weekdays(as.Date(adapteddata$date)), 1, 1) == 'S'
+adapteddata$daytype <- as.factor(adapteddata$daytype)
+levels(adapteddata$daytype) <- c("Weekday", "Weekend")
+
+#Calculate the average per interval for each type of day 
+dailydata <- adapteddata %>% select(interval, daytype, steps) %>% 
+                            group_by(daytype, interval) %>% 
+                            summarize(steps = mean(steps, na.rm = TRUE))
+plots <- xyplot(steps ~ interval | daytype, data = dailydata, type = "l")
+update(plots, layout = c(1,2))
+```
+  
+Activity pattern does appear different from weekdays to weekend. There is a more
+consistent amount of activity during daylight hours and single spike early on 
+during weekdays (the slower time afterwards being the person's work or school 
+day, possibly).
